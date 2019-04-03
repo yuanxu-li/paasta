@@ -16,6 +16,7 @@ import os
 import mock
 from mock import ANY
 from mock import patch
+from pytest import fixture
 from pytest import raises
 
 from paasta_tools.cli.cmds import mark_for_deployment
@@ -34,6 +35,12 @@ class fake_args:
     auto_rollback = False
     verify_image = False
     timeout = 10.0
+
+
+@fixture(autouse=True, scope='session')
+def mock_get_authors():
+    with patch('paasta_tools.cli.cmds.mark_for_deployment.get_authors_to_be_notified', autospec=True):
+        yield
 
 
 @patch('paasta_tools.cli.cmds.mark_for_deployment.validate_service_name', autospec=True)
@@ -171,12 +178,10 @@ def test_paasta_mark_for_deployment_with_good_rollback(
 
 
 @patch('paasta_tools.cli.cmds.mark_for_deployment.get_slack_client', autospec=True)
-@patch('paasta_tools.remote_git.get_authors', autospec=True)
-def test_slack_deploy_notifier(mock_get_authors, mock_client):
+def test_slack_deploy_notifier(mock_client):
     fake_psc = mock.create_autospec(PaastaSlackClient)
     fake_psc.post.return_value = [{'ok': True, 'message': {'ts': 1234}}]
     mock_client.return_value = fake_psc
-    mock_get_authors.return_value = 0, "fakeuser1 fakeuser2"
     sdn = mark_for_deployment.SlackDeployNotifier(
         service='testservice',
         deploy_info={
@@ -197,7 +202,6 @@ def test_slack_deploy_notifier(mock_get_authors, mock_client):
     assert sdn.notify_after_auto_rollback() is None
     assert sdn.notify_after_abort() is None
     assert fake_psc.post.call_count > 0, fake_psc.post.call_args
-    assert sdn.get_authors_to_be_notified() == "Authors: <@fakeuser1>, <@fakeuser2>"
 
     with mock.patch.dict(
         os.environ,
@@ -208,12 +212,10 @@ def test_slack_deploy_notifier(mock_get_authors, mock_client):
 
 
 @patch('paasta_tools.cli.cmds.mark_for_deployment.get_slack_client', autospec=True)
-@patch('paasta_tools.remote_git.get_authors', autospec=True)
-def test_slack_deploy_notifier_with_auto_rollbacks(mock_get_authors, mock_client):
+def test_slack_deploy_notifier_with_auto_rollbacks(mock_client):
     fake_psc = mock.create_autospec(PaastaSlackClient)
     fake_psc.post.return_value = [{'ok': True, 'message': {'ts': 1234}}]
     mock_client.return_value = fake_psc
-    mock_get_authors.return_value = 0, "fakeuser1 fakeuser2"
     sdn = mark_for_deployment.SlackDeployNotifier(
         service='testservice',
         deploy_info={
@@ -235,15 +237,12 @@ def test_slack_deploy_notifier_with_auto_rollbacks(mock_get_authors, mock_client
     assert sdn.notify_after_auto_rollback() is None
     assert sdn.notify_after_abort() is None
     assert fake_psc.post.call_count > 0, fake_psc.post.call_args
-    assert sdn.get_authors_to_be_notified() == "Authors: <@fakeuser1>, <@fakeuser2>"
 
 
 @patch('paasta_tools.cli.cmds.mark_for_deployment.get_slack_client', autospec=True)
-@patch('paasta_tools.remote_git.get_authors', autospec=True)
-def test_slack_deploy_notifier_on_non_notify_groups(mock_get_authors, mock_client):
+def test_slack_deploy_notifier_on_non_notify_groups(mock_client):
     fake_psc = mock.create_autospec(PaastaSlackClient)
     mock_client.return_value = fake_psc
-    mock_get_authors.return_value = 1, "fakeuser1 fakeuser2"
     sdn = mark_for_deployment.SlackDeployNotifier(
         service='testservice',
         deploy_info={
@@ -266,11 +265,9 @@ def test_slack_deploy_notifier_on_non_notify_groups(mock_get_authors, mock_clien
 
 
 @patch('paasta_tools.cli.cmds.mark_for_deployment.get_slack_client', autospec=True)
-@patch('paasta_tools.remote_git.get_authors', autospec=True)
-def test_slack_deploy_notifier_doesnt_notify_on_same_commit(mock_get_authors, mock_client):
+def test_slack_deploy_notifier_doesnt_notify_on_same_commit(mock_client):
     fake_psc = mock.create_autospec(PaastaSlackClient)
     mock_client.return_value = fake_psc
-    mock_get_authors.return_value = 0, "fakeuser1 fakeuser2"
     sdn = mark_for_deployment.SlackDeployNotifier(
         service='testservice',
         deploy_info={
@@ -291,16 +288,13 @@ def test_slack_deploy_notifier_doesnt_notify_on_same_commit(mock_get_authors, mo
     assert sdn.notify_after_auto_rollback() is None
     assert sdn.notify_after_abort() is None
     assert fake_psc.post.call_count == 0, fake_psc.post.call_args
-    assert sdn.get_authors_to_be_notified() == "Authors: <@fakeuser1>, <@fakeuser2>"
 
 
 @patch('paasta_tools.cli.cmds.mark_for_deployment.get_slack_client', autospec=True)
-@patch('paasta_tools.remote_git.get_authors', autospec=True)
-def test_slack_deploy_notifier_notifies_on_deploy_info_flags(mock_get_authors, mock_client):
+def test_slack_deploy_notifier_notifies_on_deploy_info_flags(mock_client):
     fake_psc = mock.create_autospec(PaastaSlackClient)
     fake_psc.post.return_value = [{'ok': True, 'message': {'ts': 1234}}]
     mock_client.return_value = fake_psc
-    mock_get_authors.return_value = 0, "fakeuser1 fakeuser2"
     sdn = mark_for_deployment.SlackDeployNotifier(
         service='testservice',
         deploy_info={
@@ -326,16 +320,13 @@ def test_slack_deploy_notifier_notifies_on_deploy_info_flags(mock_get_authors, m
     assert sdn.notify_after_auto_rollback() is None
     assert sdn.notify_after_abort() is None
     assert fake_psc.post.call_count > 0, fake_psc.post.call_args
-    assert sdn.get_authors_to_be_notified() == "Authors: <@fakeuser1>, <@fakeuser2>"
     assert "Jenkins" or "Run by" in sdn.get_url_message()
 
 
 @patch('paasta_tools.cli.cmds.mark_for_deployment.get_slack_client', autospec=True)
-@patch('paasta_tools.remote_git.get_authors', autospec=True)
-def test_slack_deploy_notifier_doesnt_notify_on_deploy_info_flags(mock_get_authors, mock_client):
+def test_slack_deploy_notifier_doesnt_notify_on_deploy_info_flags(mock_client):
     fake_psc = mock.create_autospec(PaastaSlackClient)
     mock_client.return_value = fake_psc
-    mock_get_authors.return_value = 0, "fakeuser1 fakeuser2"
     sdn = mark_for_deployment.SlackDeployNotifier(
         service='testservice',
         deploy_info={
@@ -362,7 +353,6 @@ def test_slack_deploy_notifier_doesnt_notify_on_deploy_info_flags(mock_get_autho
     assert sdn.notify_after_auto_rollback() is None
     assert sdn.notify_after_abort() is None
     assert fake_psc.post.call_count == 0, fake_psc.post.call_args
-    assert sdn.get_authors_to_be_notified() == "Authors: <@fakeuser1>, <@fakeuser2>"
 
 
 @patch('paasta_tools.cli.cmds.mark_for_deployment.get_slack_client', autospec=True)

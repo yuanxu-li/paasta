@@ -16,6 +16,7 @@ import os
 
 from slackclient import SlackClient
 
+from paasta_tools import remote_git
 from paasta_tools.utils import optionally_load_system_paasta_config
 
 log = logging.getLogger(__name__)
@@ -72,3 +73,18 @@ def get_slack_client():
     if token is None:
         token = optionally_load_system_paasta_config().get_slack_token()
     return PaastaSlackClient(token=token)
+
+
+def get_authors_to_be_notified(git_url, from_sha, to_sha):
+    ret, authors = remote_git.get_authors(
+        git_url=git_url, from_sha=from_sha, to_sha=to_sha,
+    )
+    if ret == 0:
+        if authors == "":
+            return ""
+        else:
+            slacky_authors = ", ".join([f"<@{a}>" for a in authors.split()])
+            log.debug(f"Authors: {slacky_authors}")
+            return f"Authors: {slacky_authors}"
+    else:
+        return f"(Could not get authors: {authors})"
