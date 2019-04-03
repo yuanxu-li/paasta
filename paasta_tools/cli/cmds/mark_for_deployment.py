@@ -637,7 +637,8 @@ class MarkForDeploymentProcess(automatic_rollbacks.DeploymentProcess):
             service=self.service,
             commit=self.commit,
         )
-        self.available_buttons = ["rollback"]
+        if self.old_git_sha != self.commit:
+            self.available_buttons = ["rollback"]
         self.update_slack_thread(f"mark-for-deployment finished with exit code {self.mark_for_deployment_return_code}")
         if self.mark_for_deployment_return_code != 0:
             self.trigger('mfd_failed')
@@ -773,10 +774,10 @@ class MarkForDeploymentProcess(automatic_rollbacks.DeploymentProcess):
             self.trigger('deploy_aborted')
 
     def on_enter_deployed(self):
-        line = f"Deployment of {self.commit[:8]} for {self.deploy_group} complete"
         self.active_button = None
         self.available_buttons = []
         self.update_slack_status(f"Finished deployment of `{self.commit[:8]}` to {self.deploy_group}")
+        line = f"Deployment of {self.commit[:8]} for {self.deploy_group} complete"
         _log(
             service=self.service,
             component='deploy',
@@ -793,6 +794,16 @@ class MarkForDeploymentProcess(automatic_rollbacks.DeploymentProcess):
             self.last_action = buttonpress.action
             if buttonpress.action == "rollback":
                 self.trigger('deploy_cancelled')
+
+    def send_manual_rollback_instructions(self):
+        if self.old_git_sha != self.commit:
+            message = (
+                "If you need to roll back manually, run: "
+                f"`paasta rollback --service {self.service} --deploy-group {self.deploy_group} "
+                f"--commit {self.old_git_sha}`"
+            )
+            self.update_slack_status(message)
+            paasta_print(message)
 
 
 class ClusterData:
@@ -919,8 +930,8 @@ def _run_instance_worker(cluster_data, instances_out, green_light):
                           cluster_data.cluster,
                       ))
         elif (
-            long_running_status.expected_instance_count == 0
-            or long_running_status.desired_state == 'stop'
+            long_running_status.expected_instance_count == 0 or
+            long_running_status.desired_state == 'stop'
         ):
             log.debug("{}.{} in {} is marked as stopped. Marked as deployed."
                       .format(
